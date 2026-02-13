@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Valorant JS - Ascent Full</title>
+    <title>Valorant JS - No Wallbang</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050a14; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -55,7 +55,7 @@
 
         let score = 0, ammo = 25, hp = 100, sensitivity = 0.002;
         let weaponStats = { head: 160, body: 40 };
-        const enemies = [], walls = [];
+        const enemies = [], wallMeshes = [], collisionBoxes = [];
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function playSound(f, d, v) {
@@ -77,7 +77,7 @@
         document.body.appendChild(renderer.domElement);
         scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
-        // --- ASCENT FULL MAP (SOLID) ---
+        // --- ASCENT MAP ---
         const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({color: 0x444444}));
         floor.rotation.x = -Math.PI/2;
         scene.add(floor);
@@ -86,19 +86,18 @@
             const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({color: col}));
             m.position.set(x, h/2, z);
             scene.add(m);
-            const box = new THREE.Box3().setFromObject(m);
-            walls.push(box); // Çarpışma kutularına ekle
+            wallMeshes.push(m); // Mermi kontrolü için mesh listesi
+            collisionBoxes.push(new THREE.Box3().setFromObject(m)); // Oyuncu hareketi için kutular
         }
 
-        // Ascent Mid Layout
         createSolidWall(60, 15, 2, 0, -40); // Arka Mid
         createSolidWall(2, 15, 80, -20, 0); // Market Duvarı
         createSolidWall(2, 15, 80, 20, 0);  // Pizza Duvarı
-        createSolidWall(15, 8, 2, 0, -15, 0x333333); // Meşhur Kemer
+        createSolidWall(15, 8, 2, 0, -15, 0x333333); // Mid Kemer
         createSolidWall(4, 8, 4, 10, -10, 0x00ffcc); // Radjanit Kutusu
-        createSolidWall(6, 6, 6, -10, -25, 0x555555); // Mid Generator
+        createSolidWall(6, 6, 6, -10, -25, 0x555555); // Generator
 
-        // --- BOT SİSTEMİ ---
+        // --- BOTLAR ---
         function spawnEnemy() {
             const group = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.4, 0.4), new THREE.MeshStandardMaterial({color: 0xff4655}));
@@ -119,7 +118,6 @@
         camera.add(playerGun);
         scene.add(camera);
 
-        // --- HAREKET VE ÇARPIŞMA SİSTEMİ ---
         const keys = {};
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
@@ -141,13 +139,60 @@
             toggleMarket();
         };
 
+        // OYUNCU ÇARPIŞMA KONTROLÜ
         function checkCollision(newPos) {
             const playerBox = new THREE.Box3().setFromCenterAndSize(newPos, new THREE.Vector3(1, 2, 1));
-            for(let wall of walls) {
-                if(playerBox.intersectsBox(wall)) return true;
+            for(let box of collisionBoxes) {
+                if(playerBox.intersectsBox(box)) return true;
             }
             return false;
         }
+
+        // --- MERMİ ÇARPIŞMA KONTROLÜ (DUVAR ARKASI ENGELİ) ---
+        document.addEventListener('mousedown', () => {
+            if(document.pointerLockElement && ammo > 0) {
+                ammo--; document.getElementById('ammo-val').innerText = ammo;
+                playSound(160, 0.1, 0.05);
+
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera(new THREE.Vector2(0,0), camera);
+
+                // Hem duvarları hem düşmanları kontrol et
+                const targets = [...enemies, ...wallMeshes];
+                const hits = ray.intersectObjects(targets, true);
+
+                if(hits.length > 0) {
+                    const firstHit = hits[0].object;
+
+                    // Eğer ilk çarptığı şey bir duvar ise (wallMeshes içindeyse)
+                    if(wallMeshes.includes(firstHit)) {
+                        console.log("Duvara çarptı!");
+                        return; // Botlara hasar vermeden çık
+                    }
+
+                    // Eğer ilk çarptığı şey bir botun parçası ise
+                    let botPart = firstHit;
+                    let bot = botPart.parent;
+                    
+                    if (bot && enemies.includes(bot)) {
+                        let damage = (botPart === bot.userData.headObj) ? weaponStats.head : weaponStats.body;
+                        bot.userData.hp -= damage;
+                        if(botPart === bot.userData.headObj) playSound(800, 0.1, 0.15); 
+
+                        if(bot.userData.hp <= 0) {
+                            score++; document.getElementById('score').innerText = score;
+                            scene.remove(bot);
+                            enemies.splice(enemies.indexOf(bot), 1);
+                            spawnEnemy();
+                            if(score % 5 === 0) {
+                                const bt = document.getElementById('bela-text');
+                                bt.style.opacity = "1"; setTimeout(()=>bt.style.opacity="0", 1000);
+                            }
+                        }
+                    }
+                }
+            }
+        });
 
         document.addEventListener('mousemove', (e) => {
             if(document.pointerLockElement) {
@@ -157,44 +202,17 @@
             }
         });
 
-        document.addEventListener('mousedown', () => {
-            if(document.pointerLockElement && ammo > 0) {
-                ammo--; document.getElementById('ammo-val').innerText = ammo;
-                playSound(160, 0.1, 0.05);
-                const ray = new THREE.Raycaster();
-                ray.setFromCamera(new THREE.Vector2(0,0), camera);
-                const hits = ray.intersectObjects(enemies, true);
-                if(hits.length > 0) {
-                    let hitObj = hits[0].object;
-                    let bot = hitObj.parent;
-                    let damage = (hitObj === bot.userData.headObj) ? weaponStats.head : weaponStats.body;
-                    bot.userData.hp -= damage;
-                    if(hitObj === bot.userData.headObj) playSound(800, 0.1, 0.15); 
-                    if(bot.userData.hp <= 0) {
-                        score++; document.getElementById('score').innerText = score;
-                        scene.remove(bot);
-                        enemies.splice(enemies.indexOf(bot), 1);
-                        spawnEnemy();
-                        if(score % 5 === 0) {
-                            const bt = document.getElementById('bela-text');
-                            bt.style.opacity = "1"; setTimeout(()=>bt.style.opacity="0", 1000);
-                        }
-                    }
-                }
-            }
-        });
-
         function animate() {
             requestAnimationFrame(animate);
             if(document.pointerLockElement) {
                 const speed = 0.15;
                 let nextPos = camera.position.clone();
+                let dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
                 
-                if(keys['KeyW']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(speed));
-                if(keys['KeyS']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-speed));
-                if(keys['KeyA']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).negate().multiplyScalar(speed));
-                if(keys['KeyD']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).cross(camera.up).multiplyScalar(speed));
-
+                if(keys['KeyW']) nextPos.add(dir.clone().multiplyScalar(speed));
+                if(keys['KeyS']) nextPos.add(dir.clone().multiplyScalar(-speed));
+                
                 if(!checkCollision(nextPos)) {
                     camera.position.x = nextPos.x;
                     camera.position.z = nextPos.z;
@@ -203,15 +221,15 @@
 
                 enemies.forEach(b => {
                     b.lookAt(camera.position.x, 0.9, camera.position.z);
-                    b.translateZ(0.03); // SANA DOĞRU İLERLEME
+                    b.translateZ(0.025);
                     if(Date.now() - b.userData.lastShot > 2500) {
-                        hp -= 4; // Hasar dengelendi
+                        hp -= 4;
                         document.getElementById('hp-val').innerText = hp;
                         playSound(100, 0.1, 0.02);
                         b.userData.lastShot = Date.now();
                     }
                 });
-                if(hp <= 0) { alert("Öldün! Skor: " + score); location.reload(); }
+                if(hp <= 0) { alert("Game Over! Skor: " + score); location.reload(); }
             }
             renderer.render(scene, camera);
         }
