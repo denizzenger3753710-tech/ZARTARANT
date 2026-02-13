@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Valorant JS - Ultra Mid</title>
+    <title>Valorant JS - Bela Edition</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050a14; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -10,53 +10,26 @@
             border: 2px solid #00ffcc; transform: translate(-50%, -50%); pointer-events: none; z-index: 20;
         }
         #hud { position: absolute; width: 100%; height: 100%; pointer-events: none; color: white; }
-        
-        /* KILL BAR (Alt Orta) */
-        #kill-bar {
-            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
-            display: flex; gap: 5px; height: 30px;
-        }
-        .kill-icon { width: 40px; height: 5px; background: rgba(255, 70, 85, 0.3); border: 1px solid #ff4655; }
-        .kill-active { background: #ff4655; box-shadow: 0 0 10px #ff4655; }
-
-        /* B MARKET (Sol Panel) */
-        #market-panel {
-            position: absolute; left: -300px; top: 0; width: 280px; height: 100%;
-            background: rgba(15, 25, 35, 0.95); border-right: 3px solid #ff4655;
-            transition: 0.3s; padding: 20px; color: white; z-index: 100; pointer-events: auto;
-        }
-        .market-item { padding: 15px; background: #222; margin: 10px 0; border: 1px solid #444; cursor: pointer; }
-        .market-item:hover { border-color: #00ffcc; background: #2a2a2a; }
-
         .hp-box { position: absolute; bottom: 30px; left: 50px; border-left: 4px solid #00ffcc; padding-left: 10px; }
-        #settings { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 5px; color: white; pointer-events: auto; }
+        #settings { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 10px; color: white; pointer-events: auto; border: 1px solid #ff4655; }
+        input[type="number"] { width: 50px; background: #111; color: #00ffcc; border: 1px solid #444; padding: 3px; }
+        #kill-feed { position: absolute; top: 20%; right: 20px; color: #ff4655; font-weight: bold; font-size: 20px; text-shadow: 0 0 10px black; }
     </style>
 </head>
 <body>
 
-    <div id="market-panel">
-        <h2 style="color: #ff4655;">B MARKET</h2>
-        <div class="market-item" onclick="buy('VANDAL', 25)">VANDAL - 2900</div>
-        <div class="market-item" onclick="buy('PHANTOM', 25)">PHANTOM - 2900</div>
-        <div class="market-item" onclick="buy('SHERIFF', 6)">SHERIFF - 800</div>
-        <p style="font-size: 12px; color: #777;">Kapatmak için B'ye bas</p>
+    <div id="settings">
+        SENS: <input type="number" id="sensInput" step="0.1" value="1.0">
     </div>
 
-    <div id="kill-bar">
-        <div class="kill-icon" id="k1"></div>
-        <div class="kill-icon" id="k2"></div>
-        <div class="kill-icon" id="k3"></div>
-        <div class="kill-icon" id="k4"></div>
-        <div class="kill-icon" id="k5"></div>
-    </div>
+    <div id="kill-feed"></div>
 
-    <div id="settings">SENS: <input type="number" id="sens" step="0.1" value="1.0" style="width:40px;"></div>
     <div id="crosshair"></div>
     
     <div id="hud">
         <div class="hp-box"><div style="font-size: 40px; font-weight: bold;" id="hp-val">100</div></div>
         <div style="position: absolute; bottom: 30px; right: 50px; text-align: right;">
-            <div id="gun-label" style="color:#ff4655; font-weight:bold;">PHANTOM</div>
+            <div style="color:#ff4655; font-weight:bold;">PHANTOM</div>
             <div style="font-size: 50px; font-weight:bold;" id="ammo-val">25</div>
         </div>
     </div>
@@ -68,143 +41,142 @@
     <script type="module">
         import * as THREE from 'three';
 
-        let ammo = 25, hp = 100, kills = 0, sensitivity = 0.002;
-        const enemies = [], walls = [];
+        let ammo = 25, hp = 100, sensitivity = 0.002;
+        const enemies = [];
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // --- SHADER ETKİSİ İÇİN RENDERER AYARI ---
+        // --- SES SİSTEMİ (BELA VE ATEŞ) ---
+        function playShootSound() {
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'square'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            g.gain.setValueAtTime(0.05, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        }
+
+        function playBelaSound() {
+            // Meşhur kafa vuruş "Kilink" sesi
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = 'sine'; osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            
+            // Kill feed yazısı
+            const feed = document.getElementById('kill-feed');
+            feed.innerText = "☠ BELA ☠";
+            setTimeout(() => feed.innerText = "", 1000);
+        }
+
+        // --- SAHNE ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x384a5c);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // KRİTİK DÜZELTME: Mouse yamulmasını önleyen rotasyon sırası
+        camera.rotation.order = 'YXZ'; 
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio); // Çözünürlük artırma
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ReinhardToneMapping; // Shader benzeri ışık yönetimi
         document.body.appendChild(renderer.domElement);
 
-        // IŞIKLANDIRMA
-        const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambient);
-        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        sun.position.set(10, 20, 10);
-        scene.add(sun);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
 
-        // --- ASCENT MID İNŞA ---
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.8 });
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({color: 0x444444}));
+        // Zemin ve Duvarlar (Ascent Mid Esintisi)
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x444444}));
         floor.rotation.x = -Math.PI/2;
         scene.add(floor);
 
-        function createWall(w, h, d, x, z, col = 0xcccccc) {
-            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({color: col}));
+        function createWall(w, h, d, x, z) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({color: 0x888888}));
             wall.position.set(x, h/2, z);
             scene.add(wall);
-            walls.push(new THREE.Box3().setFromObject(wall)); // Fizik sistemi
         }
+        createWall(40, 10, 1, 0, -20); // Mid Koridor
+        createWall(1, 10, 40, -15, 0); // Sol Duvar
 
-        // Mid Layout
-        createWall(60, 15, 2, 0, -30); // Arka Mid
-        createWall(2, 15, 60, -20, 0); // Sol Duvar
-        createWall(2, 15, 60, 20, 0);  // Sağ Duvar
-        createWall(8, 6, 8, 8, -10, 0x00ffcc); // Radjanit Kutusu (Mid)
-
-        // --- RAKİPLER (SİLAHLI) ---
+        // --- BOTLAR (SİLAHLI) ---
         function spawnEnemy() {
             const group = new THREE.Group();
             const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.8, 0.5), new THREE.MeshStandardMaterial({color: 0xff4655}));
-            const head = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0xffdbac}));
-            head.position.y = 1.1;
-            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.8), new THREE.MeshStandardMaterial({color: 0x000000}));
-            gun.position.set(0.5, 0.2, -0.4);
-            group.add(body, head, gun);
-            group.position.set((Math.random()-0.5)*30, 0.9, -15 - Math.random()*10);
+            const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.7), new THREE.MeshStandardMaterial({color: 0x000000}));
+            gun.position.set(0.4, 0.2, -0.4);
+            group.add(body, gun);
+            group.position.set((Math.random()-0.5)*20, 0.9, -10 - Math.random()*10);
             group.userData = { lastShot: 0 };
             scene.add(group);
             enemies.push(group);
         }
-        for(let i=0; i<4; i++) spawnEnemy();
+        for(let i=0; i<3; i++) spawnEnemy();
 
         // --- OYUNCU SİLAH ---
-        const playerGun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.8), new THREE.MeshStandardMaterial({color: 0x111111}));
+        const playerGun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.7), new THREE.MeshStandardMaterial({color: 0x111111}));
         playerGun.position.set(0.4, -0.3, -0.6);
         camera.add(playerGun);
         scene.add(camera);
 
-        // --- MEKANİKLER ---
-        let keys = {}, isMarketOpen = false;
-        document.addEventListener('keydown', (e) => {
-            keys[e.code] = true;
-            if(e.code === 'KeyB') {
-                isMarketOpen = !isMarketOpen;
-                document.getElementById('market-panel').style.left = isMarketOpen ? "0px" : "-300px";
-                if(isMarketOpen) document.exitPointerLock();
-                else document.body.requestPointerLock();
-            }
+        // --- HASSASİYET KAYIT ---
+        const sInp = document.getElementById('sensInput');
+        if(localStorage.getItem('vSens')) {
+            sInp.value = localStorage.getItem('vSens');
+            sensitivity = 0.002 * sInp.value;
+        }
+        sInp.addEventListener('input', () => {
+            sensitivity = 0.002 * sInp.value;
+            localStorage.setItem('vSens', sInp.value);
         });
-        document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        document.getElementById('sens').addEventListener('input', (e) => sensitivity = 0.002 * e.target.value);
-
+        // --- MOUSE HAREKET (YAMULMA OLMAZ) ---
         document.addEventListener('mousemove', (e) => {
             if(document.pointerLockElement) {
                 camera.rotation.y -= e.movementX * sensitivity;
-                let tx = camera.rotation.x - e.movementY * sensitivity;
-                camera.rotation.x = Math.max(-1.4, Math.min(1.4, tx));
-                camera.rotation.z = 0; // YAMUKLUK FİX
+                let newX = camera.rotation.x - e.movementY * sensitivity;
+                camera.rotation.x = Math.max(-1.5, Math.min(1.5, newX));
+                // Z ekseni artık YXZ sırası sayesinde yanlara yatmayacak!
             }
         });
-
-        window.buy = (n, a) => {
-            ammo = a;
-            document.getElementById('gun-label').innerText = n;
-            document.getElementById('ammo-val').innerText = a;
-        };
 
         document.addEventListener('mousedown', () => {
             if(document.pointerLockElement && ammo > 0) {
                 ammo--;
                 document.getElementById('ammo-val').innerText = ammo;
+                playShootSound();
                 
                 const ray = new THREE.Raycaster();
                 ray.setFromCamera(new THREE.Vector2(0,0), camera);
                 const hits = ray.intersectObjects(enemies, true);
                 if(hits.length > 0) {
+                    playBelaSound(); // KİLİNK!
                     let b = hits[0].object.parent;
-                    b.position.set((Math.random()-0.5)*30, 0.9, -15 - Math.random()*10);
-                    kills++;
-                    let kid = (kills % 5) || 5;
-                    document.getElementById('k' + kid).classList.add('kill-active');
-                    setTimeout(() => document.getElementById('k'+kid).classList.remove('kill-active'), 3000);
+                    b.position.set((Math.random()-0.5)*20, 0.9, -10 - Math.random()*10);
                 }
             }
         });
 
-        function checkCollision(nextPos) {
-            const playerBox = new THREE.Box3().setFromCenterAndSize(nextPos, new THREE.Vector3(1, 2, 1));
-            for(let wall of walls) {
-                if(playerBox.intersectsBox(wall)) return true;
-            }
-            return false;
-        }
+        let keys = {};
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
 
         function animate() {
             requestAnimationFrame(animate);
             if(document.pointerLockElement) {
                 const speed = 0.15;
-                let nextPos = camera.position.clone();
-                if(keys['KeyW']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(speed));
-                if(keys['KeyS']) nextPos.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-speed));
-                
-                if(!checkCollision(nextPos)) {
-                    camera.position.copy(nextPos);
-                }
+                if(keys['KeyW']) camera.translateZ(-speed);
+                if(keys['KeyS']) camera.translateZ(speed);
+                if(keys['KeyA']) camera.translateX(-speed);
+                if(keys['KeyD']) camera.translateX(speed);
                 camera.position.y = 1.6;
-                camera.rotation.z = 0;
 
                 enemies.forEach(b => {
                     b.lookAt(camera.position.x, 0.9, camera.position.z);
                     if(Date.now() - b.userData.lastShot > 3000) {
-                        hp -= 2;
+                        hp -= 5;
                         document.getElementById('hp-val').innerText = hp;
                         b.userData.lastShot = Date.now();
                     }
@@ -212,7 +184,7 @@
             }
             renderer.render(scene, camera);
         }
-        document.body.addEventListener('click', () => { if(!isMarketOpen) document.body.requestPointerLock(); });
+        document.body.addEventListener('click', () => document.body.requestPointerLock());
         animate();
     </script>
 </body>
