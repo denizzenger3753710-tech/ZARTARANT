@@ -4,101 +4,92 @@
     <meta charset="UTF-8">
     <title>ZARTARANT - BELA</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; }
-        
-        /* BELA LOGOSU */
-        #bela-logo { position: absolute; top: 10%; left: 50%; transform: translateX(-50%); color: #ff4655; font-size: 60px; text-shadow: 0 0 20px #ff0000; z-index: 10; font-style: italic; pointer-events: none; }
-        
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Arial Black', sans-serif; }
+        #bela-text { position: absolute; top: 20px; width: 100%; text-align: center; color: #ff4655; font-size: 50px; text-shadow: 0 0 15px #ff0000; z-index: 10; pointer-events: none; }
         #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid #0f0; transform: translate(-50%, -50%); pointer-events: none; z-index: 100; }
         
-        #zartarant-menu {
-            position: absolute; top: 20%; left: 20px; width: 250px;
+        /* HİLE PANELİ */
+        #h-panel {
+            position: absolute; top: 100px; left: 20px; width: 220px;
             background: rgba(0,0,0,0.9); border: 2px solid #ff4655;
-            color: #fff; padding: 15px; display: none; z-index: 1000;
+            color: white; padding: 15px; display: none; z-index: 1000;
         }
-        .btn { margin: 10px 0; cursor: pointer; padding: 10px; background: #222; text-align: center; border: 1px solid #444; }
-        .btn:hover { background: #ff4655; }
-
-        #hud { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 50px; color: white; pointer-events: none; box-sizing: border-box; }
-        .stat { background: rgba(0,0,0,0.8); padding: 10px 20px; border-left: 5px solid #ff4655; font-size: 20px; }
-        #overlay { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; align-items: center; justify-content: center; z-index: 2000; cursor: pointer; font-size: 25px; text-align: center; }
+        /* MARKET */
+        #m-panel {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 300px; background: rgba(15,25,35,0.95); border: 2px solid #00ffff;
+            color: white; padding: 20px; display: none; z-index: 1100;
+        }
+        .opt { padding: 10px; margin: 5px; background: #222; cursor: pointer; text-align: center; border: 1px solid #444; }
+        .opt:hover { background: #ff4655; }
+        #start-btn { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: #00ffff; display: flex; align-items: center; justify-content: center; z-index: 2000; cursor: pointer; font-size: 24px; }
     </style>
 </head>
 <body>
 
-    <div id="overlay">OYUNU VE SESLERİ YÜKLEMEK İÇİN TIKLA<br>(ZARTARANT v5.0)</div>
-    <div id="bela-logo">BELA</div>
+    <div id="start-btn">ZARTARANT BAŞLAT (TIKLA)</div>
+    <div id="bela-text">BELA</div>
 
-    <div id="zartarant-menu">
-        <div style="text-align:center; font-weight:bold; color:#ff4655; margin-bottom:10px;">ZARTARANT PANEL</div>
-        <div class="btn" onclick="applySkin('PRIME')">ASİL SKIN</div>
-        <div class="btn" onclick="applySkin('ELDERFLAME')">EJDER SKIN</div>
-        <hr>
-        <div class="btn" onclick="toggleCheat('esp')">SKELETON ESP: <span id="c-esp" style="color:red">KAPALI</span></div>
-        <div class="btn" onclick="toggleCheat('aim')">AIMBOT: <span id="c-aim" style="color:red">KAPALI</span></div>
+    <div id="h-panel">
+        <h3 style="color:#ff4655;text-align:center">HACK MENU</h3>
+        <div class="opt" onclick="applySkin('PRIME')">ASİL SKIN</div>
+        <div class="opt" onclick="applySkin('ELDERFLAME')">EJDER SKIN</div>
+        <div class="opt" onclick="toggleCheat('esp')">ESP: <span id="s-esp">KAPALI</span></div>
+        <div class="opt" onclick="toggleCheat('aim')">AIMBOT: <span id="s-aim">KAPALI</span></div>
+        <p style="font-size:10px;color:gray">Kapatmak için INSERT</p>
+    </div>
+
+    <div id="m-panel">
+        <h3 style="color:#00ffff;text-align:center">MARKET (B)</h3>
+        <div class="opt" onclick="buy('VANDAL')">VANDAL (2900)</div>
+        <div class="opt" onclick="buy('SHERIFF')">SHERIFF (800)</div>
+        <p style="font-size:10px;color:gray">Kapatmak için B</p>
     </div>
 
     <div id="crosshair"></div>
-    <div id="hud">
-        <div class="stat">CAN: <span id="hp">100</span></div>
-        <div class="stat">ZARTARANT</div>
-    </div>
 
     <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } } </script>
 
     <script type="module">
         import * as THREE from 'three';
 
-        let cheats = { esp: false, aim: false }, enemies = [], walls = [], collisionBoxes = [], keys = {};
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        function playSound(freq, dur, vol) {
-            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-            osc.type = 'square'; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + dur);
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(); osc.stop(audioCtx.currentTime + dur);
-        }
-
+        let cheats = { esp: false, aim: false }, enemies = [], walls = [], keys = {};
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050510);
+        scene.background = new THREE.Color(0x222222);
+
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+
+        // --- AYDINLATMA (KARANLIK OLMASIN DİYE) ---
+        const amb = new THREE.AmbientLight(0xffffff, 1); scene.add(amb);
+        const sun = new THREE.DirectionalLight(0xffffff, 1); sun.position.set(5, 10, 5); scene.add(sun);
 
         // --- HARİTA ---
-        function addWall(w, h, d, x, z) {
-            const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({color: 0x333333}));
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x111111}));
+        floor.rotation.x = -Math.PI/2; scene.add(floor);
+
+        function addW(w,h,d,x,z) {
+            const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({color: 0x444444}));
             m.position.set(x, h/2, z); scene.add(m); walls.push(m);
-            collisionBoxes.push(new THREE.Box3().setFromObject(m));
         }
-        addWall(200, 0.1, 200, 0, 0); // Yer
-        addWall(30, 10, 2, 0, -20); // Mid Duvar
-        addWall(2, 10, 30, -15, 0); // Sol Duvar
+        addW(40, 10, 2, 0, -20); // Mid Duvar
+        addW(2, 10, 40, -15, 0); // Yan Duvar
 
         // --- SİLAH ---
         const gun = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.8), new THREE.MeshStandardMaterial({color: 0x111111}));
-        const light = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.3), new THREE.MeshStandardMaterial({color: 0xff0000, emissive: 0xff0000}));
-        light.position.set(0, 0.1, -0.2); gun.add(body, light);
+        const gBody = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.8), new THREE.MeshStandardMaterial({color: 0x000000}));
+        const gGlow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.3), new THREE.MeshStandardMaterial({color: 0xff0000, emissive: 0xff0000}));
+        gGlow.position.set(0, 0.1, -0.2); gun.add(gBody, gGlow);
         gun.position.set(0.4, -0.4, -0.6); camera.add(gun); scene.add(camera);
 
-        window.applySkin = (s) => {
-            if(s === 'PRIME') { body.material.color.setHex(0xd4af37); light.material.emissive.setHex(0x00ffff); }
-            if(s === 'ELDERFLAME') { body.material.color.setHex(0x550000); light.material.emissive.setHex(0xffaa00); }
-        };
-
-        // --- KONTROLLER ---
-        const overlay = document.getElementById('overlay');
-        overlay.addEventListener('click', () => { document.body.requestPointerLock(); audioCtx.resume(); });
-
-        document.addEventListener('pointerlockchange', () => {
-            overlay.style.display = document.pointerLockElement ? 'none' : 'flex';
+        // --- BAŞLATMA VE KONTROL ---
+        document.getElementById('start-btn').onclick = () => { document.body.requestPointerLock(); };
+        document.addEventListener('pointerlockchange', () => { 
+            document.getElementById('start-btn').style.display = document.pointerLockElement ? 'none' : 'flex';
         });
 
         document.addEventListener('mousemove', (e) => {
@@ -111,32 +102,45 @@
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
             if(e.code === 'Insert') {
-                const m = document.getElementById('zartarant-menu');
-                m.style.display = m.style.display === 'block' ? 'none' : 'block';
-                if(m.style.display === 'block') document.exitPointerLock();
+                const p = document.getElementById('h-panel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                if(p.style.display === 'block') document.exitPointerLock();
+            }
+            if(e.code === 'KeyB') {
+                const p = document.getElementById('m-panel');
+                p.style.display = p.style.display === 'none' ? 'block' : 'none';
+                if(p.style.display === 'block') document.exitPointerLock();
             }
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        // --- HİLE FONKSİYONLARI ---
+        window.applySkin = (s) => {
+            if(s === 'PRIME') { gBody.material.color.setHex(0xd4af37); gGlow.material.emissive.setHex(0x00ffff); }
+            if(s === 'ELDERFLAME') { gBody.material.color.setHex(0x550000); gGlow.material.emissive.setHex(0xffaa00); }
+        };
+        window.buy = (gunName) => { document.getElementById('m-panel').style.display = 'none'; document.body.requestPointerLock(); };
+        window.toggleCheat = (t) => {
+            cheats[t] = !cheats[t];
+            document.getElementById('s-'+t).innerText = cheats[t] ? 'AÇIK' : 'KAPALI';
+            if(t === 'esp') enemies.forEach(e => e.children[1].material.opacity = cheats.esp ? 1 : 0);
+        };
 
         // --- BOT SİSTEMİ ---
         function spawn() {
             const g = new THREE.Group();
             const b = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.6, 0.4), new THREE.MeshStandardMaterial({color: 0xff4655}));
-            const skelMat = new THREE.LineBasicMaterial({color: 0xff0000, depthTest: false, transparent: true, opacity: 0});
-            const line = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0.8,0), new THREE.Vector3(0,-0.8,0)]), skelMat);
-            line.renderOrder = 999; g.add(b, line);
-            g.userData = { hp: 100, skel: line };
-            g.position.set((Math.random()-0.5)*30, 0.8, -15 - Math.random()*10);
+            const skel = new THREE.LineSegments(
+                new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0.8,0), new THREE.Vector3(0,-0.8,0)]), 
+                new THREE.LineBasicMaterial({color: 0xff0000, depthTest: false, transparent: true, opacity: 0})
+            );
+            skel.renderOrder = 999; g.add(b, skel);
+            g.position.set((Math.random()-0.5)*30, 0.8, -10 - Math.random()*10);
             scene.add(g); enemies.push(g);
         }
         for(let i=0; i<5; i++) spawn();
 
-        window.toggleCheat = (t) => {
-            cheats[t] = !cheats[t];
-            document.getElementById('c-'+t).innerText = cheats[t] ? 'AÇIK' : 'KAPALI';
-            if(t === 'esp') enemies.forEach(e => e.userData.skel.material.opacity = cheats.esp ? 1 : 0);
-        };
-
+        // --- ANA DÖNGÜ ---
         function animate() {
             requestAnimationFrame(animate);
             if(document.pointerLockElement) {
@@ -144,20 +148,14 @@
                 const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
                 const right = new THREE.Vector3().crossVectors(forward, camera.up).negate();
 
-                let next = camera.position.clone();
-                if(keys['KeyW']) next.add(forward.clone().multiplyScalar(speed));
-                if(keys['KeyS']) next.add(forward.clone().multiplyScalar(-speed));
-                if(keys['KeyA']) next.add(right.clone().multiplyScalar(-speed));
-                if(keys['KeyD']) next.add(right.clone().multiplyScalar(speed));
-
-                const pBox = new THREE.Box3().setFromCenterAndSize(new THREE.Vector3(next.x, 1, next.z), new THREE.Vector3(1, 1.8, 1));
-                let col = false;
-                for(let b of collisionBoxes) { if(pBox.intersectsBox(b)) col = true; }
-                if(!col) { camera.position.x = next.x; camera.position.z = next.z; }
+                if(keys['KeyW']) camera.position.add(forward.clone().multiplyScalar(speed));
+                if(keys['KeyS']) camera.position.add(forward.clone().multiplyScalar(-speed));
+                if(keys['KeyA']) camera.position.add(right.clone().multiplyScalar(-speed));
+                if(keys['KeyD']) camera.position.add(right.clone().multiplyScalar(speed));
                 camera.position.y = 1.6;
 
                 if(cheats.aim && enemies.length > 0) camera.lookAt(enemies[0].position.x, 1.8, enemies[0].position.z);
-                enemies.forEach(b => { b.lookAt(camera.position.x, 0.8, camera.position.z); b.translateZ(0.02); });
+                enemies.forEach(b => { b.lookAt(camera.position.x, 0.8, camera.position.z); b.translateZ(0.01); });
             }
             renderer.render(scene, camera);
         }
@@ -165,14 +163,12 @@
 
         window.addEventListener('mousedown', () => {
             if(!document.pointerLockElement) return;
-            playSound(150, 0.1, 0.1); // Ateş Sesi
             const ray = new THREE.Raycaster();
             ray.setFromCamera(new THREE.Vector2(0,0), camera);
             const hits = ray.intersectObjects(enemies, true);
             if(hits.length > 0) {
-                let target = hits[0].object.parent;
-                target.userData.hp -= 50; playSound(600, 0.1, 0.2); // Hit Sesi
-                if(target.userData.hp <= 0) { scene.remove(target); enemies.splice(enemies.indexOf(target),1); spawn(); }
+                let t = hits[0].object.parent;
+                scene.remove(t); enemies.splice(enemies.indexOf(t),1); spawn();
             }
         });
     </script>
