@@ -2,51 +2,54 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>ZARTARANT v11.0 - DENİZ ZENGER</title>
+    <title>ZARTARANT v11.1 - DENİZ ZENGER</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial Black', sans-serif; cursor: crosshair; }
         #bela-overlay { position: absolute; top: 30%; width: 100%; text-align: center; color: #ff4655; font-size: 80px; text-shadow: 0 0 20px #ff0000; z-index: 9000; display: none; pointer-events: none; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 8px; height: 8px; border: 2px solid #0f0; transform: translate(-50%, -50%); pointer-events: none; z-index: 100; }
-        .ui-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10,10,20,0.95); border: 2px solid #ff4655; color: white; padding: 20px; display: none; z-index: 10000; text-align: center; }
-        .opt { padding: 10px; margin: 5px; background: #222; cursor: pointer; border: 1px solid #444; }
-        .opt:hover { background: #ff4655; }
-        #hud { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; color: #ff4655; font-size: 20px; pointer-events: none; box-sizing: border-box; }
-        #start { position: absolute; width: 100%; height: 100%; background: #000; color: #ff4655; display: flex; align-items: center; justify-content: center; z-index: 11000; cursor: pointer; font-size: 30px; }
+        .ui-panel { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10,10,25,0.98); border: 2px solid #ff4655; color: white; padding: 20px; display: none; z-index: 10000; text-align: center; min-width: 200px; box-shadow: 0 0 30px #000; }
+        .opt { padding: 12px; margin: 5px; background: #1a1a1a; cursor: pointer; border: 1px solid #444; transition: 0.2s; }
+        .opt:hover { background: #ff4655; color: #fff; }
+        #hud { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; color: #ff4655; font-size: 20px; pointer-events: none; box-sizing: border-box; z-index: 500; }
+        /* BAŞLAT EKRANI - SADECE BİR KEZ GÖZÜKÜR */
+        #start-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; color: #ff4655; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 15000; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div id="start">ZARTARANT v11.0 - BAŞLATMAK İÇİN TIKLA</div>
+    <div id="start-screen" onclick="initGame()">
+        <h1 style="font-size: 50px; margin: 0;">ZARTARANT</h1>
+        <p style="color: #fff;">DENİZ ZENGER SUNAR</p>
+        <div style="background: #ff4655; color: #fff; padding: 15px 30px; margin-top: 20px; border-radius: 5px; font-size: 20px;">OYUNU BAŞLATMAK İÇİN TIKLA</div>
+    </div>
+
     <div id="bela-overlay">BELA</div>
 
     <div id="h-panel" class="ui-panel">
-        <h3>HACK MENU</h3>
-        <div class="opt" onclick="applySkin(0xd4af37)">ASİL SKIN</div>
-        <div class="opt" onclick="applySkin(0x550000)">EJDER SKIN</div>
+        <h3 style="margin-top:0">HACK MENU</h3>
+        <div class="opt" onclick="applySkin(0xd4af37)">ASİL (GOLD)</div>
+        <div class="opt" onclick="applySkin(0x550000)">EJDER (RED)</div>
         <div class="opt" onclick="toggleCheat('esp')">ESP: <span id="s-esp">KAPALI</span></div>
-        <div class="opt" onclick="toggleCheat('aim')">AIM: <span id="s-aim">KAPALI</span></div>
-        <div class="opt" onclick="closeAll()" style="background:#444">KAPAT</div>
+        <div class="opt" onclick="closePanels()">KAPAT (ESC)</div>
     </div>
 
     <div id="m-panel" class="ui-panel" style="border-color: #00ffff;">
-        <h3 style="color:#00ffff">MARKET (B)</h3>
+        <h3 style="color:#00ffff; margin-top:0">MARKET (B)</h3>
         <div class="opt" onclick="buy('VANDAL')">VANDAL</div>
-        <div class="opt" onclick="buy('PHANTOM')">PHANTOM</div>
-        <div class="opt" onclick="buy('OP')">OPERATOR</div>
-        <div class="opt" onclick="closeAll()" style="background:#444">KAPAT</div>
+        <div class="opt" onclick="buy('OPERATOR')">OPERATOR</div>
+        <div class="opt" onclick="closePanels()">KAPAT (B)</div>
     </div>
 
-    <div id="crosshair"></div>
     <div id="hud">
         <div>HP: <span id="hp">100</span> | SİLAH: <span id="wpn">VANDAL</span></div>
-        <div>KILLS: <span id="kl">0</span></div>
+        <div style="text-align: right;">KILLS: <span id="kl">0</span></div>
     </div>
 
     <script type="importmap"> { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } } </script>
 
     <script type="module">
         import * as THREE from 'three';
-        let cheats = {esp: false, aim: false}, enemies = [], keys = {}, kills = 0, hp = 100, active = false;
+
+        let cheats = {esp: false}, enemies = [], keys = {}, kills = 0, hp = 100, gameStarted = false;
         const scene = new THREE.Scene(); scene.background = new THREE.Color(0x050505);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
         camera.rotation.order = 'YXZ';
@@ -55,28 +58,47 @@
         document.body.appendChild(renderer.domElement);
         scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-        // ZEMİN VE İMZA
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({color: 0x111111}));
+        // ZEMİN
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshStandardMaterial({color: 0x111111}));
         floor.rotation.x = -Math.PI/2; scene.add(floor);
 
+        // DENİZ ZENGER İMZASI (HAVADA PARLIYOR)
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-        canvas.width = 512; canvas.height = 64; ctx.fillStyle = '#ff4655'; ctx.font = 'bold 30px Arial';
-        ctx.fillText('DENİZ ZENGER SUNAR', 80, 40);
-        const sign = new THREE.Mesh(new THREE.PlaneGeometry(15, 2), new THREE.MeshBasicMaterial({map: new THREE.CanvasTexture(canvas), transparent: true}));
-        sign.position.set(0, 8, -15); scene.add(sign);
+        canvas.width = 512; canvas.height = 64; ctx.fillStyle = '#ff4655'; ctx.font = 'bold 32px Arial';
+        ctx.fillText('DENİZ ZENGER SUNAR', 80, 45);
+        const signTex = new THREE.CanvasTexture(canvas);
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(10, 1.5), new THREE.MeshBasicMaterial({map: signTex, transparent: true}));
+        sign.position.set(0, 6, -10); scene.add(sign);
 
         // SİLAH
-        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.6), new THREE.MeshStandardMaterial({color: 0x222222}));
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.6), new THREE.MeshStandardMaterial({color: 0x333333}));
         gun.position.set(0.3, -0.3, -0.5); camera.add(gun); scene.add(camera);
 
-        // KONTROLLER
-        document.getElementById('start').onclick = () => { document.body.requestPointerLock(); active = true; };
-        window.closeAll = () => { document.querySelectorAll('.ui-panel').forEach(p=>p.style.display='none'); document.body.requestPointerLock(); };
-        
+        // BAŞLATMA FONKSİYONU
+        window.initGame = () => {
+            document.body.requestPointerLock();
+            document.getElementById('start-screen').style.display = 'none';
+            gameStarted = true;
+        };
+
+        window.closePanels = () => {
+            document.querySelectorAll('.ui-panel').forEach(p => p.style.display = 'none');
+            document.body.requestPointerLock();
+        };
+
+        // EVENTLER
         window.addEventListener('keydown', (e) => {
             keys[e.code] = true;
-            if(e.code === 'Insert') { document.getElementById('h-panel').style.display = 'block'; document.exitPointerLock(); }
-            if(e.code === 'KeyB') { document.getElementById('m-panel').style.display = 'block'; document.exitPointerLock(); }
+            if(e.code === 'Insert') {
+                const p = document.getElementById('h-panel');
+                p.style.display = (p.style.display === 'block' ? 'none' : 'block');
+                if(p.style.display === 'block') document.exitPointerLock(); else document.body.requestPointerLock();
+            }
+            if(e.code === 'KeyB') {
+                const p = document.getElementById('m-panel');
+                p.style.display = (p.style.display === 'block' ? 'none' : 'block');
+                if(p.style.display === 'block') document.exitPointerLock(); else document.body.requestPointerLock();
+            }
         });
         window.addEventListener('keyup', (e) => keys[e.code] = false);
 
@@ -87,8 +109,8 @@
             }
         });
 
-        window.applySkin = (c) => gun.material.color.setHex(c);
-        window.buy = (w) => { document.getElementById('wpn').innerText = w; closeAll(); };
+        window.applySkin = (c) => { gun.material.color.setHex(c); closePanels(); };
+        window.buy = (w) => { document.getElementById('wpn').innerText = w; closePanels(); };
         window.toggleCheat = (t) => { cheats[t] = !cheats[t]; document.getElementById('s-'+t).innerText = cheats[t]?'AÇIK':'KAPALI'; };
 
         function spawn() {
@@ -96,26 +118,30 @@
             b.position.set((Math.random()-0.5)*40, 0.8, -10 - Math.random()*20);
             scene.add(b); enemies.push(b);
         }
-        for(let i=0; i<6; i++) spawn();
+        for(let i=0; i<5; i++) spawn();
 
         function animate() {
             requestAnimationFrame(animate);
-            sign.position.y = 8 + Math.sin(Date.now()*0.002); // Parıldama hareketi
-            if(document.pointerLockElement) {
+            sign.position.y = 6 + Math.sin(Date.now()*0.003) * 0.5; // Neon tabela dalgalanması
+            
+            if(document.pointerLockElement && gameStarted) {
                 const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0; f.normalize();
                 const r = new THREE.Vector3().crossVectors(f, camera.up).normalize();
-                if(keys['KeyW']) camera.position.add(f.multiplyScalar(0.15));
-                if(keys['KeyS']) camera.position.add(f.multiplyScalar(-0.15));
-                if(keys['KeyA']) camera.position.add(r.multiplyScalar(-0.15));
-                if(keys['KeyD']) camera.position.add(r.multiplyScalar(0.15));
+                
+                if(keys['KeyW']) camera.position.add(f.multiplyScalar(0.12));
+                if(keys['KeyS']) camera.position.add(f.multiplyScalar(-0.12));
+                if(keys['KeyA']) camera.position.add(r.multiplyScalar(-0.12));
+                if(keys['KeyD']) camera.position.add(r.multiplyScalar(0.12));
                 camera.position.y = 1.6;
 
                 enemies.forEach(e => {
-                    e.lookAt(camera.position.x, 0.8, camera.position.z); e.translateZ(0.03);
-                    if(e.position.distanceTo(camera.position) < 2) { hp -= 0.5; document.getElementById('hp').innerText = Math.floor(hp); }
+                    e.lookAt(camera.position.x, 0.8, camera.position.z);
+                    e.translateZ(0.02);
+                    if(e.position.distanceTo(camera.position) < 1.5) {
+                        hp -= 0.2; document.getElementById('hp').innerText = Math.floor(hp);
+                        if(hp <= 0) location.reload();
+                    }
                 });
-                if(cheats.aim && enemies[0]) camera.lookAt(enemies[0].position.x, 1.8, enemies[0].position.z);
-                if(hp <= 0) location.reload();
             }
             renderer.render(scene, camera);
         }
@@ -129,8 +155,8 @@
                 scene.remove(hits[0].object); enemies.splice(enemies.indexOf(hits[0].object), 1); spawn();
                 kills++; document.getElementById('kl').innerText = kills;
                 if(kills % 5 === 0) { 
-                    const b = document.getElementById('bela-overlay'); 
-                    b.style.display = 'block'; setTimeout(() => b.style.display='none', 5000); 
+                    const b = document.getElementById('bela-overlay'); b.style.display = 'block'; 
+                    setTimeout(() => b.style.display='none', 5000); 
                 }
             }
         });
