@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Valorant JS - Sage Edition</title>
+    <title>Valorant JS - Ascent/Neon</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050a14; font-family: 'Segoe UI', sans-serif; }
         #crosshair {
@@ -15,27 +15,34 @@
         .ammo-box { position: absolute; bottom: 40px; right: 60px; text-align: right; border-right: 5px solid #ff4655; padding-right: 15px; }
         .neon-energy { width: 200px; height: 10px; background: rgba(255,255,255,0.2); position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); }
         #energy-bar { width: 100%; height: 100%; background: #00ffcc; }
-        #kill-feed { position: absolute; top: 20px; right: 20px; color: #ff4655; font-weight: bold; font-size: 20px; }
+        #settings { position: absolute; top: 20px; left: 20px; pointer-events: auto; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; color: white; }
         #start-screen {
-            position: absolute; width: 100%; height: 100%; background: #050a14;
+            position: absolute; width: 100%; height: 100%; background: rgba(5,10,20,0.8);
             display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; z-index: 10; cursor: pointer;
         }
     </style>
 </head>
-<body>
+<body onclick="document.body.requestPointerLock()">
 
-    <div id="start-screen" onclick="startGame()">
-        <h1 style="color: #00ffcc;">BAŞLA KANKA</h1>
-        <p>SAGE BOTLARI AVLAMAYA HAZIR MISIN?</p>
+    <div id="start-screen">
+        <h1 style="color: #00ffcc;">ASCENT'E HOŞGELDİN</h1>
+        <p>DEVAM ETMEK İÇİN TIKLA KANKA</p>
     </div>
 
-    <div id="kill-feed"></div>
+    <div id="settings">
+        Hassasiyet: <input type="range" id="sens" min="0.0005" max="0.01" step="0.0005" value="0.002">
+    </div>
+
     <div id="crosshair"></div>
     
     <div id="hud">
         <div class="neon-energy"><div id="energy-bar"></div></div>
         <div class="hp-box"><div>SAĞLIK</div><div style="font-size: 40px; font-weight: bold;">100</div></div>
-        <div class="ammo-box"><div>PHANTOM</div><div style="font-size: 40px; font-weight: bold;"><span id="ammo-count">25</span> / 75</div></div>
+        <div class="ammo-box">
+            <div>PHANTOM</div>
+            <div style="font-size: 40px; font-weight: bold;"><span id="ammo-count">25</span> / 75</div>
+            <div id="reload-msg" style="color: yellow; display: none;">R - RELOAD</div>
+        </div>
     </div>
 
     <script type="importmap">
@@ -45,115 +52,120 @@
     <script type="module">
         import * as THREE from 'three';
 
-        let ammo = 25, energy = 100, isSprinting = false, score = 0;
+        let ammo = 25, energy = 100, isSprinting = false;
+        let sensitivity = 0.002;
         const enemies = [];
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
+        document.getElementById('sens').addEventListener('input', (e) => sensitivity = parseFloat(e.target.value));
+
         // --- SAHNE ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x0a141e);
+        scene.background = new THREE.Color(0x87ceeb); // Gökyüzü (Ascent havası)
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- IŞIK ---
-        const light = new THREE.AmbientLight(0xffffff, 0.8);
-        scene.add(light);
+        // --- ASCENT HARİTASI (Basit Duvarlar) ---
+        const wallMat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshPhongMaterial({color: 0x888888}));
+        floor.rotation.x = -Math.PI/2;
+        scene.add(floor);
 
-        // --- ZEMİN ---
-        const grid = new THREE.GridHelper(200, 40, 0x00ffcc, 0x112233);
-        scene.add(grid);
+        function createWall(w, h, d, x, z) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+            wall.position.set(x, h/2, z);
+            scene.add(wall);
+        }
+        createWall(20, 10, 1, 0, -15); // Arka duvar
+        createWall(1, 10, 30, -10, 0); // Sol duvar
+        createWall(1, 10, 30, 10, 0);  // Sağ duvar
 
-        // --- SAGE BOTLARI (YEŞİL) ---
-        function createSageBot() {
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.5);
+        sun.position.set(5, 10, 5);
+        scene.add(sun);
+
+        // --- SAGE BOTU ---
+        function createSage() {
             const group = new THREE.Group();
-            // Gövde
-            const body = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.8, 0.5), new THREE.MeshPhongMaterial({ color: 0x008080 })); // Sage Yeşili
-            // Kafa
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.8, 0.4), new THREE.MeshPhongMaterial({ color: 0x008080 }));
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshPhongMaterial({ color: 0xffdbac }));
             head.position.y = 1.1;
             group.add(body, head);
-            group.position.set((Math.random()-0.5)*30, 0.9, -Math.random()*30 - 5);
+            group.position.set((Math.random()-0.5)*15, 0.9, -10);
             scene.add(group);
             enemies.push(group);
         }
-        for(let i=0; i<8; i++) createSageBot();
+        for(let i=0; i<5; i++) createSage();
 
         // --- SİLAH ---
-        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.7), new THREE.MeshPhongMaterial({ color: 0x111111 }));
+        const gun = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.7), new THREE.MeshPhongMaterial({ color: 0x222222 }));
         gun.position.set(0.35, -0.3, -0.6);
         camera.add(gun);
         scene.add(camera);
 
-        // --- KONTROLLER (MOUSE DÜZELTİLDİ) ---
+        // --- KONTROLLER ---
         let keys = {};
-        window.startGame = () => {
-            document.getElementById('start-screen').style.display = 'none';
-            document.body.requestPointerLock();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-        };
-
         document.addEventListener('keydown', (e) => {
             keys[e.code] = true;
+            if(e.code === 'KeyR' && ammo < 25) reload();
             if(e.code === 'KeyE') isSprinting = !isSprinting;
+            if(e.code === 'KeyQ') console.log("Neon Bolt Atıldı!");
+            if(e.code === 'KeyC') console.log("Neon Duvar Açıldı!");
         });
         document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        // Mouse hareketi düzeltildi (Eksenleri tersine çevirdik)
+        // MOUSE DÜZELTİLDİ: movementY artık doğru bakıyor
         document.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement) {
-                camera.rotation.y -= e.movementX * 0.002;
-                // Eksen hatasını önlemek için sınırlama
-                let newRotationX = camera.rotation.x - e.movementY * 0.002;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, newRotationX));
+                camera.rotation.y -= e.movementX * sensitivity;
+                let newX = camera.rotation.x - e.movementY * sensitivity; // Yön düzeltildi
+                camera.rotation.x = Math.max(-1.4, Math.min(1.4, newX));
             }
         });
 
-        // --- ATEŞ ETME VE SALLANTI DÜZELTME ---
-        let shake = 0;
+        function reload() {
+            document.getElementById('reload-msg').innerText = "YÜKLENİYOR...";
+            setTimeout(() => {
+                ammo = 25;
+                document.getElementById('ammo-count').innerText = ammo;
+                document.getElementById('reload-msg').style.display = 'none';
+            }, 1500);
+        }
+
         document.addEventListener('mousedown', () => {
             if (document.pointerLockElement && ammo > 0) {
                 ammo--;
                 document.getElementById('ammo-count').innerText = ammo;
-                shake = 0.03; // Ekran sallanması çok azaltıldı (soft shake)
-
+                if(ammo <= 0) document.getElementById('reload-msg').style.display = 'block';
+                
+                // Mermi İzi ve Hit Check
                 const ray = new THREE.Raycaster();
                 ray.setFromCamera(new THREE.Vector2(0,0), camera);
-                const intersects = ray.intersectObjects(enemies, true);
-
-                if (intersects.length > 0) {
-                    score++;
-                    document.getElementById('kill-feed').innerText = "SAGE ELENDİ: " + score;
-                    // Botu yeniden konumlandır
-                    const hitBot = intersects[0].object.parent;
-                    hitBot.position.set((Math.random()-0.5)*30, 0.9, -Math.random()*30 - 5);
+                const hits = ray.intersectObjects(enemies, true);
+                if(hits.length > 0) {
+                    hits[0].object.parent.position.set((Math.random()-0.5)*15, 0.9, -10);
                 }
             }
         });
 
-        // --- OYUN DÖNGÜSÜ ---
         function animate() {
             requestAnimationFrame(animate);
             if (document.pointerLockElement) {
-                let speed = (isSprinting && energy > 0) ? 0.25 : 0.1;
-                if (isSprinting && energy > 0) { energy -= 0.4; } 
-                else { isSprinting = false; if(energy < 100) energy += 0.2; }
-                
+                document.getElementById('start-screen').style.display = 'none';
+                let speed = (isSprinting && energy > 0) ? 0.3 : 0.12;
+                if (isSprinting && energy > 0) energy -= 0.5; else if(energy < 100) energy += 0.2;
                 document.getElementById('energy-bar').style.width = energy + '%';
 
                 if (keys['KeyW']) camera.translateZ(-speed);
                 if (keys['KeyS']) camera.translateZ(speed);
                 if (keys['KeyA']) camera.translateX(-speed);
                 if (keys['KeyD']) camera.translateX(speed);
-                
                 camera.position.y = 1.6;
-
-                // Soft Shake Uygula
-                if (shake > 0) {
-                    camera.position.x += Math.sin(Date.now()) * shake;
-                    shake *= 0.8;
-                }
+            } else {
+                document.getElementById('start-screen').style.display = 'flex';
             }
             renderer.render(scene, camera);
         }
